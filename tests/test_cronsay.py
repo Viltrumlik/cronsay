@@ -59,7 +59,7 @@ class ParseTest(unittest.TestCase):
     def test_reboot_is_refused_with_an_explanation(self):
         with self.assertRaises(cs.CronError) as e:
             cs.parse("@reboot")
-        self.assertIn("yuklanishda", str(e.exception))
+        self.assertIn("boot", str(e.exception))
 
     def test_bad_input_is_refused(self):
         for bad in ("* * * *", "* * * * * *", "60 * * * *", "* 24 * * *",
@@ -178,11 +178,11 @@ class CliTest(unittest.TestCase):
     def test_a_bad_expression_exits_two(self):
         out = self.run_cli("not a cron line")
         self.assertEqual(out.returncode, 2)
-        self.assertIn("xato", out.stderr)
+        self.assertIn("error", out.stderr)
 
     def test_an_impossible_date_says_never(self):
         out = self.run_cli("0 0 30 2 *")
-        self.assertIn("hech qachon", out.stdout)
+        self.assertIn("never", out.stdout)
 
 
 if __name__ == "__main__":

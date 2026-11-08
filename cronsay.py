@@ -68,7 +68,7 @@ def parse_part(part, low, high, names, name):
     if "/" in part:
         body, _, raw_step = part.partition("/")
         if not raw_step.isdigit() or int(raw_step) == 0:
-            raise CronError("%s: qadam noto'g'ri: %r" % (name, part))
+            raise CronError("%s: bad step in %r" % (name, part))
         step = int(raw_step)
 
     if body == "*":
@@ -77,7 +77,7 @@ def parse_part(part, low, high, names, name):
         a, _, b = body.partition("-")
         start, end = to_number(a, low, high, names, name), to_number(b, low, high, names, name)
         if start > end:
-            raise CronError("%s: oraliq teskari: %r" % (name, part))
+            raise CronError("%s: range runs backwards in %r" % (name, part))
     else:
         start = end = to_number(body, low, high, names, name)
         if step > 1:
@@ -91,10 +91,10 @@ def to_number(text, low, high, names, name):
     if names and text in names:
         return names.index(text) + (1 if names is MONTHS else 0)
     if not text.lstrip("-").isdigit():
-        raise CronError("%s: son emas: %r" % (name, text))
+        raise CronError("%s: not a number: %r" % (name, text))
     value = int(text)
     if not low <= value <= high:
-        raise CronError("%s: %d oraliqdan tashqarida (%d-%d)" % (name, value, low, high))
+        raise CronError("%s: %d is out of range (%d-%d)" % (name, value, low, high))
     return value
 
 
@@ -103,24 +103,24 @@ def parse_field(text, low, high, names, name):
     for part in text.split(","):
         part = part.strip()
         if not part:
-            raise CronError("%s: bo'sh bo'lak" % name)
+            raise CronError("%s: empty part" % name)
         got, is_star, got_step = parse_part(part, low, high, names, name)
         values.update(got)
         star = star and is_star
         step = step or got_step
     if not values:
-        raise CronError("%s: hech narsa tanlanmadi" % name)
+        raise CronError("%s: selects nothing" % name)
     return Field(name, sorted(values), star and step is None, step)
 
 
 def parse(expression):
     text = expression.strip()
     if text.lower() == "@reboot":
-        raise CronError("@reboot vaqt jadvali emas: u har safar yuklanishda ishlaydi")
+        raise CronError("@reboot is not a schedule: it runs once at every boot")
     text = SHORTHAND.get(text.lower(), text)
     parts = text.split()
     if len(parts) != 5:
-        raise CronError("5 ta maydon kutilgan, %d ta berildi" % len(parts))
+        raise CronError("expected 5 fields, got %d" % len(parts))
     fields = []
     for part, (name, low, high, names) in zip(parts, FIELDS):
         fields.append(parse_field(part, low, high, names, name))
@@ -262,11 +262,11 @@ def next_runs(fields, start, count=3, horizon_days=HORIZON_DAYS):
 def main(argv=None):
     p = argparse.ArgumentParser(
         prog="cronsay",
-        description="Cron ifodasini oddiy so'z bilan tushuntiradi.",
-        epilog='misol: cronsay "*/15 9-17 * * 1-5" --next 5')
-    p.add_argument("expression", nargs="+", metavar="IFODA")
+        description="Say what a cron expression actually means.",
+        epilog='example: cronsay "*/15 9-17 * * 1-5" --next 5')
+    p.add_argument("expression", nargs="+", metavar="EXPRESSION")
     p.add_argument("--next", type=int, default=3, metavar="N",
-                   help="keyingi N ishga tushishni ko'rsatish (0 -- ko'rsatilmasin)")
+                   help="show the next N run times (0 to hide them)")
     p.add_argument("--version", action="version", version="cronsay " + VERSION)
     args = p.parse_args(argv)
 
@@ -274,14 +274,14 @@ def main(argv=None):
     try:
         fields = parse(expression)
     except CronError as e:
-        print("xato: %s" % e, file=sys.stderr)
+        print("error: %s" % e, file=sys.stderr)
         return EXIT_USAGE
 
     print(describe(fields))
     if args.next > 0:
         runs = next_runs(fields, dt.datetime.now(), args.next)
         if not runs:
-            print("next: hech qachon (bunday sana mavjud emas, masalan 30 fevral)")
+            print("next: never (no such date exists, for example 30 February)")
         else:
             shown, last_date = [], None
             for run in runs:
